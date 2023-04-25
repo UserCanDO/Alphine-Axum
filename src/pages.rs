@@ -1,40 +1,58 @@
+use tera::Tera;
+use tera::Context;
 use axum::response::Html;
+use tower_cookies::Cookies;
 
-use crate::{elements::{Element, About, Home, NotFound, Users}, utils::Utils};
+use crate::api::config::Database;
+use crate::api::items::User;
 
-fn page(title: &str, element: impl Element )->Html<String>{
-    let global_style = Utils::load_style("style.css");
-    let component = element.html();
-    let init = format!(
-        r#"<!DOCTYPE html>
-        <html>
-            <head>
-                <title>{}</title>
-                <script src='https://unpkg.com/alpinejs' defer></script>
-                <style>{}{}</style>
-            </head>
-            <body>{}
-                <script>{}</script>
-            </body>
-        </html>"#, title, global_style, component.style.as_str(), component.layout.as_str(), component.script.as_str(), 
-    );
-
-    return Html(init);
+lazy_static::lazy_static! {
+    pub static ref TEMPLATES: Tera = {
+        let mut tera = match Tera::new("templates/**/*") {
+            Ok(t) => t,
+            Err(e) => {
+                println!("Parsing error(s): {}", e);
+                ::std::process::exit(1);
+            }
+        };
+        tera.autoescape_on(vec![".html", ".sql"]);
+        tera
+    };
 }
 
 
-pub async fn home_page() -> Html<String> {
-    return page("Axum Test | Home", Home::new(None));
+pub async fn home_page(cookies: Cookies) -> Html<String> {
+    let cookie = cookies.get("axum");
+    if cookie.is_some(){
+        let id = cookie.unwrap().value().to_owned();
+           
+        let db_result = Database::new().await;
+        if !db_result.is_error(){
+            let pool = db_result.unwrap();
+    
+            let details_result = User::get(pool, id.as_str()).await;
+            if !details_result.is_error(){
+                
+            }   
+        }
+    }
+
+    let page = &TEMPLATES.render("home.html", &Context::new()).unwrap();
+
+    return Html(page.to_owned());
 }
 
 pub async fn about_page() -> Html<String> {
-    return page("Axum Test | About", About);
+    let page = &TEMPLATES.render("about.html", &Context::new()).unwrap();
+    return Html(page.to_owned());
 }
 
 pub async fn not_found_page() -> Html<String> {
-    return page("Axum Test | Not Found", NotFound);
+    let page = &TEMPLATES.render("not-found.html", &Context::new()).unwrap();
+    return Html(page.to_owned());
 }
 
 pub async fn users_page() -> Html<String> {
-    return page("Axum Test | All Users", Users);
+    let page = &TEMPLATES.render("users.html", &Context::new()).unwrap();
+    return Html(page.to_owned());
 }
